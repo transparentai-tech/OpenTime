@@ -1,0 +1,147 @@
+"""Tests for MCP server tools via direct function calls with a mock context."""
+
+from unittest.mock import MagicMock
+
+import pytest
+
+from opentime.core.clock import ClockService
+from opentime.core.events import EventTracker
+from opentime.core.stats import DurationStats
+from opentime.db.connection import open_database
+from opentime.mcp_server.server import (
+    AppContext,
+    clock_elapsed_since,
+    clock_now,
+    event_get,
+    event_list,
+    event_record,
+    event_task_end,
+    event_task_start,
+    stats_all,
+    stats_duration,
+    stats_list_task_types,
+    stopwatch_delete,
+    stopwatch_list,
+    stopwatch_start,
+    stopwatch_stop,
+)
+
+
+@pytest.fixture
+def app_context():
+    conn = open_database(None)
+    ctx = AppContext(
+        clock=ClockService(),
+        events=EventTracker(conn, "mcp-test-agent"),
+        stats=DurationStats(conn, "mcp-test-agent"),
+    )
+    yield ctx
+    conn.close()
+
+
+@pytest.fixture
+def mock_ctx(app_context):
+    """Mock MCP Context that provides AppContext via request_context.lifespan_context."""
+    ctx = MagicMock()
+    ctx.request_context.lifespan_context = app_context
+    return ctx
+
+
+def test_clock_now(mock_ctx):
+    result = clock_now(mock_ctx)
+    assert "now" in result
+    assert "unix" in result
+    assert isinstance(result["unix"], float)
+
+
+def test_clock_elapsed_since(mock_ctx):
+    result = clock_elapsed_since("2020-01-01T00:00:00+00:00", mock_ctx)
+    assert "elapsed_seconds" in result
+    assert result["elapsed_seconds"] > 0
+    assert result["since"] == "2020-01-01T00:00:00+00:00"
+
+
+def test_stopwatch_lifecycle(mock_ctx):
+    start_result = stopwatch_start("test-sw", mock_ctx)
+    assert start_result["name"] == "test-sw"
+    assert "started_at" in start_result
+
+    stop_result = stopwatch_stop("test-sw", mock_ctx)
+    assert stop_result["name"] == "test-sw"
+    assert stop_result["elapsed_seconds"] >= 0
+    assert stop_result["is_running"] is False
+
+
+def test_stopwatch_list_and_delete(mock_ctx):
+    stopwatch_start("sw1", mock_ctx)
+    stopwatch_start("sw2", mock_ctx)
+
+    list_result = stopwatch_list(mock_ctx)
+    assert len(list_result["stopwatches"]) == 2
+
+    delete_result = stopwatch_delete("sw1", mock_ctx)
+    assert delete_result["deleted"] == "sw1"
+
+    list_result = stopwatch_list(mock_ctx)
+    assert len(list_result["stopwatches"]) == 1
+
+
+def test_event_record_and_list(mock_ctx):
+    result = event_record("message_sent", mock_ctx, metadata='{"to": "user"}')
+    assert result["event"]["event_type"] == "message_sent"
+    assert result["event"]["id"] is not None
+
+    list_result = event_list(mock_ctx)
+    assert len(list_result["events"]) == 1
+
+
+def test_event_task_start_end(mock_ctx):
+    start = event_task_start("coding", mock_ctx)
+    assert start["event"]["event_type"] == "task_start"
+    assert start["event"]["task_type"] == "coding"
+
+    end = event_task_end("coding", mock_ctx)
+    assert end["event"]["event_type"] == "task_end"
+
+
+def test_event_get(mock_ctx):
+    created = event_record("test", mock_ctx)
+    event_id = created["event"]["id"]
+
+    found = event_get(event_id, mock_ctx)
+    assert found["event"] is not None
+    assert found["event"]["id"] == event_id
+
+    missing = event_get("nonexistent", mock_ctx)
+    assert missing["event"] is None
+
+
+def test_stats_duration(mock_ctx):
+    # No data yet
+    result = stats_duration("coding", mock_ctx)
+    assert result["summary"] is None
+
+    # Record a start/end pair
+    event_task_start("coding", mock_ctx)
+    event_task_end("coding", mock_ctx)
+
+    result = stats_duration("coding", mock_ctx)
+    assert result["summary"] is not None
+    assert result["summary"]["count"] == 1
+
+
+def test_stats_list_task_types(mock_ctx):
+    event_task_start("coding", mock_ctx)
+    event_task_start("download", mock_ctx)
+
+    result = stats_list_task_types(mock_ctx)
+    assert set(result["task_types"]) == {"coding", "download"}
+
+
+def test_stats_all(mock_ctx):
+    event_task_start("coding", mock_ctx)
+    event_task_end("coding", mock_ctx)
+
+    result = stats_all(mock_ctx)
+    assert len(result["summaries"]) == 1
+    assert result["summaries"][0]["task_type"] == "coding"
