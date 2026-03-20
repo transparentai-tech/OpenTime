@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "opentime": {
+      "type": "stdio",
+      "command": "/home/ian/Documents/Projects/OpenTime/.venv/bin/python",
+      "args": ["-m", "opentime.mcp_server.server"],
+      "env": {
+        "OPENTIME_DB_PATH": "/home/ian/.opentime/claude-code.db",
+        "OPENTIME_AGENT_ID": "claude-code"
+      }
+    }
+  }
+}

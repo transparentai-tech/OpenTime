@@ -59,3 +59,47 @@ def test_summarize_all(db_conn, duration_stats):
     by_type = {s.task_type: s for s in summaries}
     assert by_type["coding"].mean_seconds == 10.0
     assert by_type["download"].mean_seconds == 60.0
+
+
+def test_summarize_overlapping_tasks(db_conn, duration_stats):
+    """Two overlapping tasks with different correlation_ids and different durations."""
+    # Task A: 20s
+    queries.insert_event(
+        db_conn, "s1", "test-agent", "task_start", "coding", "2026-01-01T00:00:00+00:00", None, "cid-a"
+    )
+    # Task B: 5s (overlaps with A)
+    queries.insert_event(
+        db_conn, "s2", "test-agent", "task_start", "coding", "2026-01-01T00:00:05+00:00", None, "cid-b"
+    )
+    queries.insert_event(
+        db_conn, "e2", "test-agent", "task_end", "coding", "2026-01-01T00:00:10+00:00", None, "cid-b"
+    )
+    queries.insert_event(
+        db_conn, "e1", "test-agent", "task_end", "coding", "2026-01-01T00:00:20+00:00", None, "cid-a"
+    )
+
+    summary = duration_stats.summarize("coding")
+    assert summary is not None
+    assert summary.count == 2
+    assert summary.mean_seconds == 12.5
+    assert summary.min_seconds == 5.0
+    assert summary.max_seconds == 20.0
+
+
+def test_summarize_mixed_legacy_and_correlated(db_conn, duration_stats):
+    """Mix of legacy (no correlation_id) and new (with correlation_id) events."""
+    # Correlated: 15s
+    queries.insert_event(
+        db_conn, "s1", "test-agent", "task_start", "coding", "2026-01-01T00:00:00+00:00", None, "cid-x"
+    )
+    queries.insert_event(
+        db_conn, "e1", "test-agent", "task_end", "coding", "2026-01-01T00:00:15+00:00", None, "cid-x"
+    )
+    # Legacy: 10s
+    queries.insert_event(db_conn, "s2", "test-agent", "task_start", "coding", "2026-01-01T00:01:00+00:00", None)
+    queries.insert_event(db_conn, "e2", "test-agent", "task_end", "coding", "2026-01-01T00:01:10+00:00", None)
+
+    summary = duration_stats.summarize("coding")
+    assert summary is not None
+    assert summary.count == 2
+    assert summary.mean_seconds == 12.5

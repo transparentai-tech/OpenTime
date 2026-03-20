@@ -69,3 +69,83 @@ def test_distinct_task_types(db_conn):
 
     types = queries.distinct_task_types(db_conn, "agent-a")
     assert set(types) == {"coding", "download"}
+
+
+def test_insert_event_with_correlation_id(db_conn):
+    queries.insert_event(db_conn, "e1", "agent-a", "task_start", "coding", "2026-01-01T00:00:00+00:00", None, "cid-1")
+    row = queries.select_event_by_id(db_conn, "e1")
+    assert row[6] == "cid-1"  # correlation_id is the 7th column
+
+
+def test_compute_task_durations_with_correlation_ids(db_conn):
+    """Two overlapping tasks of the same type, correctly paired by correlation_id."""
+    # Task A: starts at :00, ends at :20 → 20s
+    queries.insert_event(
+        db_conn, "s1", "agent-a", "task_start", "coding", "2026-01-01T00:00:00+00:00", None, "cid-a"
+    )
+    # Task B: starts at :05, ends at :10 → 5s (overlaps with A)
+    queries.insert_event(
+        db_conn, "s2", "agent-a", "task_start", "coding", "2026-01-01T00:00:05+00:00", None, "cid-b"
+    )
+    queries.insert_event(
+        db_conn, "e2", "agent-a", "task_end", "coding", "2026-01-01T00:00:10+00:00", None, "cid-b"
+    )
+    queries.insert_event(
+        db_conn, "e1", "agent-a", "task_end", "coding", "2026-01-01T00:00:20+00:00", None, "cid-a"
+    )
+
+    durations = queries.compute_task_durations(db_conn, "agent-a", "coding")
+    assert sorted(durations) == [5.0, 20.0]
+
+
+def test_compute_task_durations_legacy_fallback(db_conn):
+    """Events without correlation_ids still pair chronologically."""
+    queries.insert_event(db_conn, "s1", "agent-a", "task_start", "coding", "2026-01-01T00:00:00+00:00", None)
+    queries.insert_event(db_conn, "e1", "agent-a", "task_end", "coding", "2026-01-01T00:00:10+00:00", None)
+
+    durations = queries.compute_task_durations(db_conn, "agent-a", "coding")
+    assert durations == [10.0]
+
+
+def test_compute_task_durations_mixed(db_conn):
+    """Mix of correlated and uncorrelated events."""
+    # Correlated pair: 15s
+    queries.insert_event(
+        db_conn, "s1", "agent-a", "task_start", "coding", "2026-01-01T00:00:00+00:00", None, "cid-x"
+    )
+    queries.insert_event(
+        db_conn, "e1", "agent-a", "task_end", "coding", "2026-01-01T00:00:15+00:00", None, "cid-x"
+    )
+    # Uncorrelated pair: 10s
+    queries.insert_event(db_conn, "s2", "agent-a", "task_start", "coding", "2026-01-01T00:01:00+00:00", None)
+    queries.insert_event(db_conn, "e2", "agent-a", "task_end", "coding", "2026-01-01T00:01:10+00:00", None)
+
+    durations = queries.compute_task_durations(db_conn, "agent-a", "coding")
+    assert sorted(durations) == [10.0, 15.0]
+
+
+def test_select_active_tasks(db_conn):
+    # Active task (started, not ended)
+    queries.insert_event(
+        db_conn, "s1", "agent-a", "task_start", "coding", "2026-01-01T00:00:00+00:00", None, "cid-1"
+    )
+    # Completed task (started and ended)
+    queries.insert_event(
+        db_conn, "s2", "agent-a", "task_start", "coding", "2026-01-01T00:01:00+00:00", None, "cid-2"
+    )
+    queries.insert_event(
+        db_conn, "e2", "agent-a", "task_end", "coding", "2026-01-01T00:01:30+00:00", None, "cid-2"
+    )
+
+    active = queries.select_active_tasks(db_conn, "agent-a")
+    assert len(active) == 1
+    assert active[0][6] == "cid-1"  # correlation_id
+
+    # Filter by task_type
+    queries.insert_event(
+        db_conn, "s3", "agent-a", "task_start", "download", "2026-01-01T00:02:00+00:00", None, "cid-3"
+    )
+    active_coding = queries.select_active_tasks(db_conn, "agent-a", task_type="coding")
+    assert len(active_coding) == 1
+    active_all = queries.select_active_tasks(db_conn, "agent-a")
+    assert len(active_all) == 2

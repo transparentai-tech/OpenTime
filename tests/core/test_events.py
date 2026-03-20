@@ -70,3 +70,66 @@ def test_get_event_by_id(event_tracker):
 def test_get_event_not_found(event_tracker):
     result = event_tracker.get_event("nonexistent")
     assert result is None
+
+
+def test_record_task_start_generates_correlation_id(event_tracker):
+    event = event_tracker.record_task_start("coding")
+    assert event.correlation_id is not None
+    assert len(event.correlation_id) == 32  # hex UUID
+
+
+def test_record_task_end_with_correlation_id(event_tracker):
+    start = event_tracker.record_task_start("coding")
+    end = event_tracker.record_task_end("coding", correlation_id=start.correlation_id)
+    assert end.correlation_id == start.correlation_id
+
+
+def test_record_task_end_without_correlation_id(event_tracker):
+    end = event_tracker.record_task_end("coding")
+    assert end.correlation_id is None
+
+
+def test_get_active_tasks(event_tracker):
+    s1 = event_tracker.record_task_start("coding")
+    s2 = event_tracker.record_task_start("download")
+
+    active = event_tracker.get_active_tasks()
+    assert len(active) == 2
+
+    # End one task
+    event_tracker.record_task_end("coding", correlation_id=s1.correlation_id)
+    active = event_tracker.get_active_tasks()
+    assert len(active) == 1
+    assert active[0].correlation_id == s2.correlation_id
+
+
+def test_get_active_tasks_by_type(event_tracker):
+    event_tracker.record_task_start("coding")
+    event_tracker.record_task_start("download")
+
+    coding = event_tracker.get_active_tasks(task_type="coding")
+    assert len(coding) == 1
+    assert coding[0].task_type == "coding"
+
+
+def test_event_correlation_id_in_get_event(event_tracker):
+    start = event_tracker.record_task_start("coding")
+    found = event_tracker.get_event(start.id)
+    assert found is not None
+    assert found.correlation_id == start.correlation_id
+
+
+def test_overlapping_tasks_same_type(event_tracker):
+    """Two overlapping tasks of the same type pair correctly via correlation_id."""
+    s1 = event_tracker.record_task_start("coding", metadata="task-a")
+    s2 = event_tracker.record_task_start("coding", metadata="task-b")
+    event_tracker.record_task_end("coding", correlation_id=s2.correlation_id)
+    event_tracker.record_task_end("coding", correlation_id=s1.correlation_id)
+
+    # Both should show up in events
+    events = event_tracker.get_events(event_type="task_start")
+    assert len(events) == 2
+
+    # No active tasks remain
+    active = event_tracker.get_active_tasks()
+    assert len(active) == 0

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -47,6 +48,12 @@ mcp = FastMCP(
 
 def _ctx(ctx: Context) -> AppContext:
     return ctx.request_context.lifespan_context
+
+
+def _serialize_metadata(metadata: str | dict | None) -> str | None:
+    if isinstance(metadata, dict):
+        return json.dumps(metadata)
+    return metadata
 
 
 # ── Clock tools ──────────────────────────────────────────────────────────────
@@ -118,6 +125,7 @@ def _event_to_dict(e) -> dict:
         "task_type": e.task_type,
         "timestamp": e.timestamp,
         "metadata": e.metadata,
+        "correlation_id": e.correlation_id,
     }
 
 
@@ -125,23 +133,25 @@ def _event_to_dict(e) -> dict:
 def event_record(event_type: str, ctx: Context, task_type: str | None = None, metadata: str | None = None) -> dict:
     """Record a timestamped event. Use event_type to classify it (e.g., 'message_sent', 'subprocess_launched')."""
     app = _ctx(ctx)
-    event = app.events.record_event(event_type, task_type=task_type, metadata=metadata)
+    event = app.events.record_event(event_type, task_type=task_type, metadata=_serialize_metadata(metadata))
     return {"event": _event_to_dict(event)}
 
 
 @mcp.tool()
 def event_task_start(task_type: str, ctx: Context, metadata: str | None = None) -> dict:
-    """Record that a task has started. Pair with event_task_end to enable duration tracking."""
+    """Record that a task has started. Returns a correlation_id — pass it to event_task_end to pair them."""
     app = _ctx(ctx)
-    event = app.events.record_task_start(task_type, metadata=metadata)
-    return {"event": _event_to_dict(event)}
+    event = app.events.record_task_start(task_type, metadata=_serialize_metadata(metadata))
+    return {"event": _event_to_dict(event), "correlation_id": event.correlation_id}
 
 
 @mcp.tool()
-def event_task_end(task_type: str, ctx: Context, metadata: str | None = None) -> dict:
-    """Record that a task has ended. Pair with event_task_start to enable duration tracking."""
+def event_task_end(
+    task_type: str, ctx: Context, correlation_id: str | None = None, metadata: str | None = None,
+) -> dict:
+    """Record that a task has ended. Pass the correlation_id from event_task_start for correct pairing."""
     app = _ctx(ctx)
-    event = app.events.record_task_end(task_type, metadata=metadata)
+    event = app.events.record_task_end(task_type, metadata=_serialize_metadata(metadata), correlation_id=correlation_id)
     return {"event": _event_to_dict(event)}
 
 
@@ -167,6 +177,14 @@ def event_get(event_id: str, ctx: Context) -> dict:
     if event is None:
         return {"event": None}
     return {"event": _event_to_dict(event)}
+
+
+@mcp.tool()
+def event_active_tasks(ctx: Context, task_type: str | None = None) -> dict:
+    """List tasks that have been started but not yet ended."""
+    app = _ctx(ctx)
+    events = app.events.get_active_tasks(task_type=task_type)
+    return {"active_tasks": [_event_to_dict(e) for e in events]}
 
 
 # ── Stats tools ──────────────────────────────────────────────────────────────

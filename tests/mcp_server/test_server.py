@@ -12,6 +12,7 @@ from opentime.mcp_server.server import (
     AppContext,
     clock_elapsed_since,
     clock_now,
+    event_active_tasks,
     event_get,
     event_list,
     event_record,
@@ -99,9 +100,12 @@ def test_event_task_start_end(mock_ctx):
     start = event_task_start("coding", mock_ctx)
     assert start["event"]["event_type"] == "task_start"
     assert start["event"]["task_type"] == "coding"
+    assert start["correlation_id"] is not None
 
-    end = event_task_end("coding", mock_ctx)
+    cid = start["correlation_id"]
+    end = event_task_end("coding", mock_ctx, correlation_id=cid)
     assert end["event"]["event_type"] == "task_end"
+    assert end["event"]["correlation_id"] == cid
 
 
 def test_event_get(mock_ctx):
@@ -121,9 +125,10 @@ def test_stats_duration(mock_ctx):
     result = stats_duration("coding", mock_ctx)
     assert result["summary"] is None
 
-    # Record a start/end pair
-    event_task_start("coding", mock_ctx)
-    event_task_end("coding", mock_ctx)
+    # Record a start/end pair with correlation_id
+    start = event_task_start("coding", mock_ctx)
+    cid = start["correlation_id"]
+    event_task_end("coding", mock_ctx, correlation_id=cid)
 
     result = stats_duration("coding", mock_ctx)
     assert result["summary"] is not None
@@ -139,9 +144,36 @@ def test_stats_list_task_types(mock_ctx):
 
 
 def test_stats_all(mock_ctx):
-    event_task_start("coding", mock_ctx)
-    event_task_end("coding", mock_ctx)
+    start = event_task_start("coding", mock_ctx)
+    event_task_end("coding", mock_ctx, correlation_id=start["correlation_id"])
 
     result = stats_all(mock_ctx)
     assert len(result["summaries"]) == 1
     assert result["summaries"][0]["task_type"] == "coding"
+
+
+def test_event_task_start_returns_correlation_id(mock_ctx):
+    result = event_task_start("coding", mock_ctx)
+    assert "correlation_id" in result
+    assert result["correlation_id"] is not None
+    assert result["event"]["correlation_id"] == result["correlation_id"]
+
+
+def test_event_active_tasks(mock_ctx):
+    start = event_task_start("coding", mock_ctx)
+    cid = start["correlation_id"]
+
+    active = event_active_tasks(mock_ctx)
+    assert len(active["active_tasks"]) == 1
+    assert active["active_tasks"][0]["correlation_id"] == cid
+
+    event_task_end("coding", mock_ctx, correlation_id=cid)
+    active = event_active_tasks(mock_ctx)
+    assert len(active["active_tasks"]) == 0
+
+
+def test_event_record_dict_metadata(mock_ctx):
+    """Metadata passed as a dict should be serialized to JSON string."""
+    # Simulate what happens when MCP client sends a dict
+    result = event_record("test", mock_ctx, metadata='{"key": "value"}')
+    assert result["event"]["metadata"] == '{"key": "value"}'

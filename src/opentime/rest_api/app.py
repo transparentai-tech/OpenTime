@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from contextlib import asynccontextmanager
 
@@ -19,15 +20,27 @@ _stats: DurationStats
 _conn = None
 
 
+def _serialize_metadata(metadata: str | dict | None) -> str | None:
+    if isinstance(metadata, dict):
+        return json.dumps(metadata)
+    return metadata
+
+
 class EventCreateRequest(BaseModel):
     event_type: str
     task_type: str | None = None
-    metadata: str | None = None
+    metadata: str | dict | None = None
 
 
-class TaskEventRequest(BaseModel):
+class TaskStartRequest(BaseModel):
     task_type: str
-    metadata: str | None = None
+    metadata: str | dict | None = None
+
+
+class TaskEndRequest(BaseModel):
+    task_type: str
+    correlation_id: str | None = None
+    metadata: str | dict | None = None
 
 
 @asynccontextmanager
@@ -54,6 +67,7 @@ def _event_to_dict(e) -> dict:
         "task_type": e.task_type,
         "timestamp": e.timestamp,
         "metadata": e.metadata,
+        "correlation_id": e.correlation_id,
     }
 
 
@@ -136,20 +150,29 @@ def api_stopwatch_delete(name: str):
 
 @app.post("/events")
 def api_event_record(req: EventCreateRequest):
-    event = _events.record_event(req.event_type, task_type=req.task_type, metadata=req.metadata)
+    event = _events.record_event(req.event_type, task_type=req.task_type, metadata=_serialize_metadata(req.metadata))
     return {"event": _event_to_dict(event)}
 
 
 @app.post("/events/task-start")
-def api_event_task_start(req: TaskEventRequest):
-    event = _events.record_task_start(req.task_type, metadata=req.metadata)
-    return {"event": _event_to_dict(event)}
+def api_event_task_start(req: TaskStartRequest):
+    event = _events.record_task_start(req.task_type, metadata=_serialize_metadata(req.metadata))
+    return {"event": _event_to_dict(event), "correlation_id": event.correlation_id}
 
 
 @app.post("/events/task-end")
-def api_event_task_end(req: TaskEventRequest):
-    event = _events.record_task_end(req.task_type, metadata=req.metadata)
+def api_event_task_end(req: TaskEndRequest):
+    event = _events.record_task_end(
+        req.task_type, metadata=_serialize_metadata(req.metadata), correlation_id=req.correlation_id,
+    )
     return {"event": _event_to_dict(event)}
+
+
+# NOTE: /events/active MUST be before /events/{event_id} to avoid path collision
+@app.get("/events/active")
+def api_event_active_tasks(task_type: str | None = None):
+    events = _events.get_active_tasks(task_type=task_type)
+    return {"active_tasks": [_event_to_dict(e) for e in events]}
 
 
 @app.get("/events")

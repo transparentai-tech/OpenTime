@@ -107,10 +107,13 @@ def test_task_start_end(client):
     resp = client.post("/events/task-start", json={"task_type": "coding"})
     assert resp.status_code == 200
     assert resp.json()["event"]["event_type"] == "task_start"
+    assert resp.json()["correlation_id"] is not None
 
-    resp = client.post("/events/task-end", json={"task_type": "coding"})
+    cid = resp.json()["correlation_id"]
+    resp = client.post("/events/task-end", json={"task_type": "coding", "correlation_id": cid})
     assert resp.status_code == 200
     assert resp.json()["event"]["event_type"] == "task_end"
+    assert resp.json()["event"]["correlation_id"] == cid
 
 
 def test_stats_flow(client):
@@ -118,9 +121,10 @@ def test_stats_flow(client):
     resp = client.get("/stats/durations/coding")
     assert resp.status_code == 404
 
-    # Record task pair
-    client.post("/events/task-start", json={"task_type": "coding"})
-    client.post("/events/task-end", json={"task_type": "coding"})
+    # Record task pair with correlation_id
+    start = client.post("/events/task-start", json={"task_type": "coding"})
+    cid = start.json()["correlation_id"]
+    client.post("/events/task-end", json={"task_type": "coding", "correlation_id": cid})
 
     # Now stats should work
     resp = client.get("/stats/durations/coding")
@@ -154,3 +158,33 @@ def test_events_with_filters(client):
     # Limit
     resp = client.get("/events", params={"limit": 1})
     assert len(resp.json()["events"]) == 1
+
+
+def test_active_tasks_endpoint(client):
+    start = client.post("/events/task-start", json={"task_type": "coding"})
+    cid = start.json()["correlation_id"]
+
+    resp = client.get("/events/active")
+    assert resp.status_code == 200
+    assert len(resp.json()["active_tasks"]) == 1
+    assert resp.json()["active_tasks"][0]["correlation_id"] == cid
+
+    # End the task
+    client.post("/events/task-end", json={"task_type": "coding", "correlation_id": cid})
+    resp = client.get("/events/active")
+    assert len(resp.json()["active_tasks"]) == 0
+
+
+def test_active_tasks_filter_by_type(client):
+    client.post("/events/task-start", json={"task_type": "coding"})
+    client.post("/events/task-start", json={"task_type": "download"})
+
+    resp = client.get("/events/active", params={"task_type": "coding"})
+    assert len(resp.json()["active_tasks"]) == 1
+
+
+def test_event_create_dict_metadata(client):
+    """Metadata passed as a JSON object should be stored as a JSON string."""
+    resp = client.post("/events", json={"event_type": "test", "metadata": {"key": "value"}})
+    assert resp.status_code == 200
+    assert resp.json()["event"]["metadata"] == '{"key": "value"}'
