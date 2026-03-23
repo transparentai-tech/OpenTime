@@ -1,0 +1,13 @@
+services:
+  opentime:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - opentime-data:/data
+    environment:
+      - OPENTIME_AGENT_ID=default
+    restart: unless-stopped
+
+volumes:
+  opentime-data:

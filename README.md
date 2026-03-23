@@ -42,12 +42,13 @@ pip install opentime[rest]
 
 ## Integration Options
 
-OpenTime works with any AI agent through three interfaces:
+OpenTime works with any AI agent through four interfaces:
 
 | Interface | Best For | Requires Agent Awareness? |
 |-----------|----------|--------------------------|
 | **MCP Server** | Claude Code, Claude Desktop, Cursor, Windsurf, Cline | Yes (agent calls tools) |
 | **REST API** | ChatGPT, Gemini, LangChain, custom agents | Yes (agent calls endpoints) |
+| **Docker** | Any environment — no Python install needed | Yes (agent calls endpoints) |
 | **Hooks** | Claude Code passive tracking | No (fully automatic) |
 
 ### Option 1: MCP Server
@@ -70,7 +71,28 @@ For any MCP-compatible client (Claude Code, Claude Desktop, Cursor, Windsurf, et
 
 The agent gets access to 21 tools for time tracking, event recording, and duration statistics.
 
-### Option 2: REST API
+### Option 2: Docker (Recommended for Quick Start)
+
+No Python environment needed — just Docker:
+
+```bash
+# One command to start
+docker compose up -d
+
+# Or without compose
+docker run -d -p 8080:8080 -v opentime-data:/data opentime:latest
+```
+
+The REST API is immediately available at `http://localhost:8080` with Swagger docs at `http://localhost:8080/docs`.
+
+To build from source:
+```bash
+git clone https://github.com/transparentai-tech/OpenTime.git
+cd OpenTime
+docker compose up -d
+```
+
+### Option 3: REST API (pip install)
 
 For any agent that can make HTTP calls — ChatGPT custom actions, Gemini function calling, LangChain tools, AutoGPT, CrewAI, or your own agents:
 
@@ -106,7 +128,7 @@ curl http://localhost:8080/stats/recommend-timeout/code_generation
 # Returns: {"recommendation": {"recommended_seconds": 18.6, "percentile": 0.95, ...}}
 ```
 
-### Option 3: Passive Hooks (Claude Code)
+### Option 4: Passive Hooks (Claude Code)
 
 For fully automatic time tracking with zero agent involvement:
 

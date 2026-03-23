@@ -1,0 +1,15 @@
+.venv/
+.git/
+.claude/
+.mcp.json
+CLAUDE.md
+*.db
+*.sqlite
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+dist/
+build/
+*.egg-info/
