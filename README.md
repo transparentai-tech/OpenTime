@@ -90,7 +90,7 @@ The REST API is immediately available at `http://localhost:8080` with Swagger do
 
 To build from source:
 ```bash
-git clone https://github.com/transparentai-tech/OpenTime.git
+git clone https://github.com/SyntheticCognitionLabs/OpenTime.git
 cd OpenTime
 docker compose up -d
 ```
@@ -345,7 +345,7 @@ MCP Server / REST API        <- thin wrappers, no business logic
 
 ```bash
 # Setup
-git clone https://github.com/transparentai-tech/OpenTime.git
+git clone https://github.com/SyntheticCognitionLabs/OpenTime.git
 cd OpenTime
 python3 -m venv .venv && .venv/bin/pip install -e ".[all]"
 

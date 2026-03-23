@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 OpenTime is an open-source Python framework that gives AI agents temporal awareness and time-effort estimation. Agents connect via MCP server or REST API to track time, record events, learn per-agent duration statistics, get timeout recommendations, and compare approaches using historical data.
 
-**Remote:** https://github.com/transparentai-tech/OpenTime.git
+**Remote:** https://github.com/SyntheticCognitionLabs/OpenTime.git
 
 ## Development Commands
 

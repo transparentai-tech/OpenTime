@@ -10,7 +10,7 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
 authors = [
-    { name = "ian-c-hamilton" },
+    { name = "ian-scl" },
 ]
 keywords = ["ai", "agents", "time", "mcp", "temporal"]
 classifiers = [
@@ -53,9 +53,9 @@ opentime-mcp = "opentime.mcp_server.server:run"
 opentime-rest = "opentime.rest_api.app:main"
 
 [project.urls]
-Homepage = "https://github.com/transparentai-tech/OpenTime"
-Repository = "https://github.com/transparentai-tech/OpenTime"
-Issues = "https://github.com/transparentai-tech/OpenTime/issues"
+Homepage = "https://github.com/SyntheticCognitionLabs/OpenTime"
+Repository = "https://github.com/SyntheticCognitionLabs/OpenTime"
+Issues = "https://github.com/SyntheticCognitionLabs/OpenTime/issues"
 
 [tool.hatch.build]
 exclude = [".claude/", ".mcp.json", "CLAUDE.md"]
