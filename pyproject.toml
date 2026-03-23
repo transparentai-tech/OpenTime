@@ -53,6 +53,9 @@ Homepage = "https://github.com/transparentai-tech/OpenTime"
 Repository = "https://github.com/transparentai-tech/OpenTime"
 Issues = "https://github.com/transparentai-tech/OpenTime/issues"
 
+[tool.hatch.build]
+exclude = [".claude/", ".mcp.json", "CLAUDE.md"]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/opentime"]
 
