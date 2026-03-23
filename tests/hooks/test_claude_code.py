@@ -4,7 +4,7 @@ import json
 
 from opentime.db.connection import open_database
 from opentime.db.queries import select_events
-from opentime.hooks.claude_code import handle_post_tool_use, handle_pre_tool_use, handle_stop
+from opentime.hooks._common import handle_post_tool_use, handle_pre_tool_use, handle_stop
 
 
 def _make_hook_data(**overrides):
