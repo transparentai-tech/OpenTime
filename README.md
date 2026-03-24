@@ -359,6 +359,10 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[all]"
 .venv/bin/ruff check src/ tests/
 ```
 
+## Roadmap
+
+See [ROADMAP.md](ROADMAP.md) for planned features including PostgreSQL backend, data export/import, alerting, agent benchmarking, and more.
+
 ## License
 
 MIT
